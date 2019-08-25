@@ -160,12 +160,14 @@ prog define gradeapplication
 
 
 		if strlen("${savevar}")>=1 {
-			export excel $savevar nscore* selected if nscore_total>0  using "$folder/$output.xlsx", sheet(gradded) sheetreplace firstrow(varl)
+			export excel $savevar nscore* selected if nscore_total>0 & selected== "Yes"  using "$folder/$output.xlsx", sheet(selected) sheetreplace firstrow(varl)
+			export excel $savevar nscore* selected if nscore_total>0 & selected== "No"   using "$folder/$output.xlsx", sheet(not_selected) sheetreplace firstrow(varl)
 			export excel $savevar nscore* selected if nscore_total<0  using "$folder/$output.xlsx", sheet(dropped) sheetreplace firstrow(varl)
-			
+
 			else if strlen("${savevar}")<1 {
-				export excel if nscore_total>0  using "$folder/$output.xlsx", sheet(gradded) sheetreplace firstrow(varl)
-				export excel if nscore_total<0  using "$folder/$output.xlsx", sheet(dropped) sheetreplace firstrow(varl)
+			export excel  if nscore_total>0 & selected== "Yes"  using "$folder/$output.xlsx", sheet(selected) sheetreplace firstrow(varl)
+			export excel  if nscore_total>0 & selected== "No"   using "$folder/$output.xlsx", sheet(not_selected) sheetreplace firstrow(varl)
+			export excel  if nscore_total<0  using "$folder/$output.xlsx", sheet(dropped) sheetreplace firstrow(varl)
 
 			}
 	}
