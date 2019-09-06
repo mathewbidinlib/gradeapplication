@@ -1,7 +1,6 @@
 
 *! Mathew Bidinlib mbidinlib@poverty-action.org
 
-
 prog define gradeapplication
 
 	syntax using/,clear
@@ -32,6 +31,18 @@ prog define gradeapplication
 		glo savevar     `d9'
 
 		*add a dummy variable for merging
+		cap confirm var az
+		if !_rc {
+			destring az, replace
+			replace az= _n
+			}
+
+		if _rc {
+			gen  az= _n
+		}
+		
+		tempfile criteria_sheet
+		save criteria_sheet, replace
 		
 		if regexm("$folder/$data",".xlx|.xlsx|.xlsm") {
 			import excel using "$folder/$data", first clear
@@ -44,25 +55,26 @@ prog define gradeapplication
 			}
 			
 			else {
-				di as err "Invalid data format. YOu may  have to ad the extension(.dta,.xlx,.csv)"
+				di as err "Invalid data format. You may  have to ad the extension(.dta,.xlx,.csv)"
 				exit 999
 			}
 		}
 		
-		
-		cap gen  az= _n
-		save "${folder}/${data}_checked.dta", replace
+				
+		gen az=_n
+		tempfile data_file
+		save data_file, replace
 
-		import excel using "$folder/$criteria", clear
+		use "criteria_sheet", clear
 		ren _all, lower
 
-		merge 1:1 az using "${folder}/${data}_checked.dta", force
+		merge 1:1 az using "data_file", force
 
 		*Loop to Check the variables specified
 
 		foreach i of varlist d h { 
 			
-			forval j = 11(10)101 {
+			forval j = 11(13)651 {
 
 			*Generate variables for score if not empty
 				loc svar= `i'[`j']
@@ -74,12 +86,12 @@ prog define gradeapplication
 					
 						* Verify if name of variable is not longer than 20
 							loc a1= strlen("`var_1'")
-							loc b1= substr("`var_1'",1,23)
-							loc vars= cond(`a1'<25, "`var_1'","`b1'")
-							gen nscore_`vars' =0
+							loc b1= substr("`var_1'",1,20)
+							loc vars= cond(`a1'<20, "`var_1'","`b1'")
+							gen nsc_`vars'`i'`j' =0
 									
 							*loop though the criteria
-							forval k= 2/8 {
+							forval k= 2/11 {
 							
 								loc pval= cond("`i'"== "d", "c" , "g")
 								loc val_1 = `j'+`k'
@@ -88,7 +100,7 @@ prog define gradeapplication
 							    if "`cval'" != "" {
 									loc grade_1= `j'+`k'
 									loc  cgrade= `i'[`grade_1']
-									replace nscore_`vars' = `cgrade'  if `vars' == `cval'
+									replace nsc_`vars'`i'`j' = `cgrade'  if `var_1' == `cval'
 								}
 
 							 }
@@ -99,7 +111,7 @@ prog define gradeapplication
 			
 			
 		** String Variables
-		forval j = 113(8)137 {
+		forval j = 668(13)707 {
 
 			*Generate variables for score if not empty
 				loc svar= `i'[`j']
@@ -111,12 +123,12 @@ prog define gradeapplication
 					
 						* Verify if name of variable is not longer than 20
 							loc a1= strlen("`var_1'")
-							loc b1= substr("`var_1'",1,23)
+							loc b1= substr("`var_1'",1,15)
 							loc vars= cond(`a1'<25, "`var_1'","`b1'")
-							gen nscore_`vars' =0
+							gen nsc_`vars' = 0
 									
 							*loop though the criteria
-							forval k= 2/6 {
+							forval k= 2/11 {
 							
 								loc pval= cond("`i'"== "d", "c" , "g")
 								loc val_1 = `j'+`k'
@@ -125,7 +137,7 @@ prog define gradeapplication
 							    if "`cval'" != "" {
 									loc grade_1= `j'+`k'
 									loc  cgrade= `i'[`grade_1']
-									replace nscore_`vars' = `cgrade'  if regexm(`vars',"`cval'")
+									replace nsc_`vars' = `cgrade'  if regexm(`var_1',"`cval'")
 								}
 
 							 }
@@ -149,25 +161,28 @@ prog define gradeapplication
 
 		*export excel using $folder/$output, first replace
 		*Total Score
-		egen nscore_total= rowtotal(nscore*)
+		egen total_score= rowtotal(nsc_*)
 
 		*Rank
-		gsort - nscore_total
+		gsort - total_score
+		
+		egen rank = rank(-total_score)
+		gen ranking=floor(rank)
 		
 		*selected
-		gen selected= "Yes" if _n<= $select_num
-		replace selected= "No" if _n> $select_num
+		gen selected= "Yes" if ranking<= $select_num
+		replace selected= "No" if ranking> $select_num
 
 
 		if strlen("${savevar}")>=1 {
-			export excel $savevar nscore* selected if nscore_total>0 & selected== "Yes"  using "$folder/$output.xlsx", sheet(selected) sheetreplace firstrow(varl)
-			export excel $savevar nscore* selected if nscore_total>0 & selected== "No"   using "$folder/$output.xlsx", sheet(not_selected) sheetreplace firstrow(varl)
-			export excel $savevar nscore* selected if nscore_total<0  using "$folder/$output.xlsx", sheet(dropped) sheetreplace firstrow(varl)
+			export excel $savevar nsc* total_score ranking selected if total_score>0 & selected== "Yes"  using "$folder/$output.xlsx", sheet(selected) sheetreplace firstrow(varl)
+			cap export excel $savevar nsc* total_score ranking selected if total_score>0 & selected== "No"   using "$folder/$output.xlsx", sheet(not_selected) sheetreplace firstrow(varl)
+			export excel $savevar nsc* total_score ranking selected if total_score<0  using "$folder/$output.xlsx", sheet(dropped) sheetreplace firstrow(varl)
 
-			else if strlen("${savevar}")<1 {
-			export excel  if nscore_total>0 & selected== "Yes"  using "$folder/$output.xlsx", sheet(selected) sheetreplace firstrow(varl)
-			export excel  if nscore_total>0 & selected== "No"   using "$folder/$output.xlsx", sheet(not_selected) sheetreplace firstrow(varl)
-			export excel  if nscore_total<0  using "$folder/$output.xlsx", sheet(dropped) sheetreplace firstrow(varl)
+		else if strlen("${savevar}")<1 {
+				export excel  if total_score>0 & selected== "Yes"  using "$folder/$output.xlsx", sheet(selected) sheetreplace firstrow(varl)
+				cap export excel  if total_score>0 & selected== "No"   using "$folder/$output.xlsx", sheet(not_selected) sheetreplace firstrow(varl)
+				export excel  if total_score<0  using "$folder/$output.xlsx", sheet(dropped) sheetreplace firstrow(varl)
 
 			}
 	}
