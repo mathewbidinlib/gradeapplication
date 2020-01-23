@@ -1,34 +1,44 @@
 
-*! Mathew Bidinlib mbidinlib@poverty-action.org
+**********************************************
+**Grading applications and first shortlisting*
+** August 2019*******************************
+**********************************************
+*Purpose
+* When 
+
+*! Mathew Bidinlib 
+*!mbidinlib@poverty-action.com
+
+cap prog drop gradeapplication
 
 prog define gradeapplication
 
 	syntax using/,clear
 
-	clear
+	cls
 
 	qui {
 	
 		import excel using "`using'" , clear 
 
-		*globals for details entered
+		*locals for details entered
 
 		ren _all, lower
 
-		loc d3 	 =   d[3]
-		loc d4	=    d[4]
-		loc	d5	=    d[5]
-		loc d6  =    d[6]
-		loc d7  =    d[7]
-		loc d8  =    d[8]
-		loc d9  =    d[9]
+		loc folder 		  =    d[4]
+		loc data		  =    d[5]
+		loc	criteria	  =    d[6]
+		loc output 		  =    d[7]
+		loc select_num    =    d[8]
+		loc savevar   	  =    d[9]
 
-		glo folder 	    `d4'
-		glo data 	    `d5'
-		glo criteria    `d6'
-		glo output      `d7'
-		glo select_num  `d8'
-		glo savevar     `d9'
+		
+	*** Giving detail of the program
+		noi di "{title: Grading Applications for shorlisting}"
+		noi di "Folder"		_column(30) "`folder'" 
+		noi di "Number to be selected" _column(30)  "`select_num'"
+		noi di "{hline}"
+		
 
 		*add a dummy variable for merging
 		cap confirm var az
@@ -44,22 +54,17 @@ prog define gradeapplication
 		tempfile criteria_sheet
 		save criteria_sheet, replace
 		
-		if regexm("$folder/$data",".xlx|.xlsx|.xlsm") {
-			import excel using "$folder/$data", first clear
+		if regexm("`folder'/`data'",".xlx|.xlsx|.xlsm") import excel using "`folder'/`data'", first clear
 			
-			esle if regexm("$folder/$data",".csv") {
-				import delimited using "$folder/$data", clear
-			}
-			else if regexm("$folder/$data",".dta") {
-				use "$folder/$data", clear
-			}
-			
-			else {
-				di as err "Invalid data format. You may  have to ad the extension(.dta,.xlx,.csv)"
-				exit 999
-			}
-		}
+		else if regexm("`folder'/`data'",".csv") 		import delimited using "`folder'/`data'", clear
 		
+		else if regexm("`folder'/`data'",".dta") 		use "`folder'/`data'", clear
+			
+		else {
+			di as err "Invalid data format. You may  have to ad the extension(.dta,.xlx,.csv)"
+			exit 999
+			}
+	
 				
 		gen az=_n
 		tempfile data_file
@@ -152,12 +157,13 @@ prog define gradeapplication
 			
 		}
 
-		*drop uneccesary variables and export
+		*drop uneccesary variables and export raw data of applicants
 		drop b- az 
 		drop if _merge==1
 		drop _merge
 
-		export excel using "$folder/${output}.xlsx", sheet(raw) sheetreplace firstrow(varl)
+		
+		export excel using "`folder'/`output'.xlsx", sheet(raw) sheetreplace firstrow(varl)
 
 		*export excel using $folder/$output, first replace
 		*Total Score
@@ -170,21 +176,91 @@ prog define gradeapplication
 		gen ranking=floor(rank)
 		
 		*selected
-		gen selected= "Yes" if ranking<= $select_num
-		replace selected= "No" if ranking> $select_num
+		if strlen("`select_num'")>=1 {
+			gen selected= "Yes" if ranking<= `select_num'
+			replace selected= "No" if ranking> `select_num'
+		}
+		else gen selected="Yes"
+		
+
+		loc outfile "`folder'/`output'.xlsx"
+		
+	
+
+		loc savevars "`savevar' nsc* total_score ranking selected"
+		drop if missing(username)
+		
+		noi di "{title: Exporting Sheets}"
+		noi di "Sheet 1" _column(30)  "Selected candidates"
+		export excel `savevar' nsc* total_score ranking selected if total_score>0 & selected== "Yes"  using "`outfile'", sheet(selected) cell("B2") sheetreplace firstrow(varl)
+		
+		*Format Sheet containing selected candidates
+		count if total_score>0 & selected== "Yes"
+		loc  rows = r(N)
+		mata: sheet_format("selected")
+		
+		
+		no di "Sheet 2" _column(30)  "Candidates Not Selected"
+		cap export excel `savevar' nsc* total_score ranking selected if total_score>0 & selected== "No"   using "`outfile'", sheet(not_selected) cell("B2") sheetreplace firstrow(varl)
+		
+		*format sheet containing not selected candidates
+		count if total_score>0 & selected== "No" 
+		loc  rows = r(N)
+		mata: sheet_format("not_selected")
+		
+		noi di "Sheet 3" _column(30)  "Candidates Dropped"
+		export excel `savevar' nsc* total_score ranking selected if total_score<0  using "`outfile'", sheet(dropped) cell("B2") sheetreplace firstrow(varl)
+		
+		*Format sheet of dropped candidates
+		count if total_score<0
+		loc  rows = r(N)
+		mata: sheet_format("dropped")
 
 
-		if strlen("${savevar}")>=1 {
-			export excel $savevar nsc* total_score ranking selected if total_score>0 & selected== "Yes"  using "$folder/$output.xlsx", sheet(selected) sheetreplace firstrow(varl)
-			cap export excel $savevar nsc* total_score ranking selected if total_score>0 & selected== "No"   using "$folder/$output.xlsx", sheet(not_selected) sheetreplace firstrow(varl)
-			export excel $savevar nsc* total_score ranking selected if total_score<0  using "$folder/$output.xlsx", sheet(dropped) sheetreplace firstrow(varl)
-
-		else if strlen("${savevar}")<1 {
-				export excel  if total_score>0 & selected== "Yes"  using "$folder/$output.xlsx", sheet(selected) sheetreplace firstrow(varl)
-				cap export excel  if total_score>0 & selected== "No"   using "$folder/$output.xlsx", sheet(not_selected) sheetreplace firstrow(varl)
-				export excel  if total_score<0  using "$folder/$output.xlsx", sheet(dropped) sheetreplace firstrow(varl)
-
-			}
-	}
+  }
+  
+  noi di "Selection completed"
+  noi di "{hline}"
 
 end
+
+
+
+* Formart exported sheets
+
+mata:
+mata clear
+void sheet_format(string scalar sheet) {
+	filename 		= st_local("outfile")
+	vars			= st_local("savevars")
+	rows			= strtoreal(st_local("rows"))
+
+	class xl scalar b
+
+	b.load_book(filename)
+	b.set_sheet(sheet)
+	b.set_sheet_gridlines(sheet, "off")
+	
+	dat= st_data(.,vars)
+
+	b.set_border((2, rows + 2), (2, cols(dat) + 1), "thin")
+	b.set_top_border((2, 2),  (2, cols(dat) + 1), "thick")
+	b.set_bottom_border((2, 2),  (2, cols(dat) + 1), "thick")
+	b.set_left_border((2, rows + 2), (2, 2), "thick")
+	b.set_right_border((2, rows + 2), (cols(dat) + 1, cols(dat) + 1), "thick")
+	b.set_bottom_border((rows + 2, rows + 2), (2, cols(dat) + 1), "thick")
+
+}
+end
+
+
+
+
+
+
+
+
+
+
+
+
